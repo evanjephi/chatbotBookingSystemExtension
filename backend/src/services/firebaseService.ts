@@ -18,10 +18,15 @@ export class FirebaseService {
 
       if (process.env.FIREBASE_SERVICE_ACCOUNT) {
         try {
-          const saStr = process.env.FIREBASE_SERVICE_ACCOUNT;
-          // Handle escaped newlines in private key
-          const fixedSaStr = saStr.replace(/\\n/g, '\n');
-          serviceAccount = JSON.parse(fixedSaStr);
+          // The JSON is stored as a string in .env.local
+          // The private_key has literal \n characters (not escape sequences)
+          let saStr = process.env.FIREBASE_SERVICE_ACCOUNT;
+          
+          // Only replace \n if it appears as a literal backslash-n in the string
+          // This handles both cases: \\n and \n
+          saStr = saStr.replace(/\\\\n/g, '\n').replace(/\\n/g, '\n');
+          
+          serviceAccount = JSON.parse(saStr);
         } catch (err) {
           console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT:', err);
           throw new Error('Invalid FIREBASE_SERVICE_ACCOUNT JSON');
@@ -92,6 +97,15 @@ export class FirebaseService {
       id: doc.id,
       ...doc.data(),
     } as PSWProfile));
+  }
+
+  async createPSW(psw: Omit<PSWProfile, 'id'>): Promise<string> {
+    const docRef = await this.db.collection('psws').add({
+      ...psw,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    return docRef.id;
   }
 
   // Booking operations
