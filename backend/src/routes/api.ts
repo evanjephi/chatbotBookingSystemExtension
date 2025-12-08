@@ -2,8 +2,30 @@ import { Router } from 'express';
 import chatController from '../controllers/chatController.js';
 import bookingController from '../controllers/bookingController.js';
 import pswController from '../controllers/pswController.js';
+import { SAMPLE_PSW_PROFILES } from '../data/sampleData.js';
+import { FirebaseService } from '../services/firebaseService.js';
 
 const router = Router();
+
+// Seed database with sample data
+router.post('/seed', async (req, res) => {
+  try {
+    const firebaseService = FirebaseService.getInstance();
+    
+    // Seed PSW data
+    for (const psw of SAMPLE_PSW_PROFILES) {
+      await firebaseService.createPSW(psw as any);
+    }
+    
+    res.json({ 
+      message: 'Database seeded successfully',
+      pswCount: SAMPLE_PSW_PROFILES.length 
+    });
+  } catch (error) {
+    console.error('Seed error:', error);
+    res.status(500).json({ error: 'Failed to seed database' });
+  }
+});
 
 // Chat routes
 router.post('/chat/message', (req, res) => chatController.sendMessage(req, res));
