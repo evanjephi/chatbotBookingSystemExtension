@@ -1,0 +1,9 @@
+{
+  "devDependencies": {
+    "@types/babel__core": "^7.20.5",
+    "@types/google.maps": "^3.58.1",
+    "@types/json-schema": "^7.0.15",
+    "@types/prop-types": "^15.7.15",
+    "@types/semver": "^7.7.1"
+  }
+}
