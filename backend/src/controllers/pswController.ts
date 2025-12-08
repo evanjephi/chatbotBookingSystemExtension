@@ -124,4 +124,13 @@ export class PSWController {
   }
 }
 
-export default new PSWController();
+let pswControllerInstance: PSWController;
+
+const getPSWController = () => {
+  if (!pswControllerInstance) {
+    pswControllerInstance = new PSWController();
+  }
+  return pswControllerInstance;
+};
+
+export default getPSWController();
