@@ -158,4 +158,13 @@ Is there anything else I can help you with?`;
   }
 }
 
-export default new BookingController();
+let bookingControllerInstance: BookingController;
+
+const getBookingController = () => {
+  if (!bookingControllerInstance) {
+    bookingControllerInstance = new BookingController();
+  }
+  return bookingControllerInstance;
+};
+
+export default getBookingController();
