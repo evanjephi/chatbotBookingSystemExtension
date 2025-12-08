@@ -200,4 +200,13 @@ Feel free to describe your needs in your own words!`;
   }
 }
 
-export default new ChatController();
+let chatControllerInstance: ChatController;
+
+const getChatController = () => {
+  if (!chatControllerInstance) {
+    chatControllerInstance = new ChatController();
+  }
+  return chatControllerInstance;
+};
+
+export default getChatController();
