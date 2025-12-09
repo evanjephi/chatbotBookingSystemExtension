@@ -27,23 +27,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ clientId }) => {
 
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Initialize conversation on component mount
   useEffect(() => {
     const initializeConversation = async () => {
       try {
+        console.log('Initializing conversation for client:', clientId);
         setClientId(clientId);
         const conversation = await chatAPI.createConversation(clientId);
+        console.log('Conversation created:', conversation);
         setConversationId(conversation.id);
       } catch (err) {
         console.error('Failed to initialize conversation:', err);
+        setError(`Failed to start chat: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
     };
 
-    if (!conversationId) {
+    if (!conversationId && clientId) {
       initializeConversation();
     }
-  }, [clientId, conversationId, setClientId, setConversationId]);
+  }, [clientId]);
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -108,6 +112,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ clientId }) => {
       addMessage(errorMessage);
     } finally {
       setIsLoading(false);
+      // Return focus to input after message is sent
+      setTimeout(() => inputRef.current?.focus(), 0);
     }
   };
 
@@ -166,12 +172,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ clientId }) => {
       {/* Input Area */}
       <form onSubmit={handleSendMessage} className="chat-input-form">
         <input
+          ref={inputRef}
           type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           placeholder="Type your message..."
           disabled={isLoading || !conversationId}
           className="chat-input"
+          autoComplete="off"
         />
         <button type="submit" disabled={isLoading || !inputValue.trim()}>
           Send
