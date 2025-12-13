@@ -175,8 +175,9 @@ Feel free to describe your needs in your own words!`;
         status: 'active',
       });
     } catch (error) {
-      console.error('Conversation creation error:', error);
-      res.status(500).json({ error: 'Failed to create conversation' });
+      console.error('Conversation creation error:', error instanceof Error ? error.message : error);
+      console.error('Full error:', error);
+      res.status(500).json({ error: 'Failed to create conversation', details: error instanceof Error ? error.message : String(error) });
     }
   }
 
