@@ -3,6 +3,9 @@ import dotenv from 'dotenv';
 // Load environment variables FIRST, before any other imports
 dotenv.config({ path: '.env.local' });
 
+console.log('Environment loaded. FIREBASE_SERVICE_ACCOUNT exists:', !!process.env.FIREBASE_SERVICE_ACCOUNT);
+console.log('OPENAI_API_KEY exists:', !!process.env.OPENAI_API_KEY);
+
 import express from 'express';
 import cors from 'cors';
 import apiRoutes from './routes/api.js';
@@ -32,6 +35,11 @@ app.use((req, _res, next) => {
 // Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Firebase health check
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), message: 'API is running' });
 });
 
 // API routes
