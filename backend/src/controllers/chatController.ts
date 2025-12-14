@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import aiService from '../services/aiService.js';
 import { FirebaseService } from '../services/firebaseService.js';
 import pswMatchingService from '../services/pswMatchingService.js';
+import { extractBookingDataFromMessage, generateAIFallbackMessage } from '../services/dataExtractionFallback.js';
 import type { ChatRequest, ChatResponse, BookingData } from '../types/index.js';
 
 export class ChatController {
@@ -35,11 +36,13 @@ export class ChatController {
         console.log('[sendMessage] AI processing successful');
       } catch (aiErr) {
         console.error('[sendMessage] AI service error:', aiErr instanceof Error ? aiErr.message : aiErr);
-        // Fallback response if AI fails
+        // Fallback: use simple data extraction
+        const extractedData = extractBookingDataFromMessage(message);
+        const aiMessage = generateAIFallbackMessage(message, extractedData);
         aiResult = {
-          aiMessage: 'Thank you for your message. I understand you need: ' + message + '. Please provide more details about your location, preferred date, and time.',
-          extractedData: {},
-          confidence: 0.3,
+          aiMessage,
+          extractedData,
+          confidence: extractedData.confidence || 0.3,
           requiresConfirmation: false,
         };
       }
