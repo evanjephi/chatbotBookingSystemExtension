@@ -5,5 +5,8 @@
     "@types/json-schema": "^7.0.15",
     "@types/prop-types": "^15.7.15",
     "@types/semver": "^7.7.1"
+  },
+  "dependencies": {
+    "openai": "^6.10.0"
   }
 }
