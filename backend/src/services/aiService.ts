@@ -24,30 +24,14 @@ const SYSTEM_PROMPT = `You are a helpful PSW (Personal Support Worker) booking a
 2. Extract booking information (location, date, time, service type, preferences)
 3. Ask clarifying questions when information is incomplete or ambiguous
 4. Maintain a friendly and professional tone
-5. Confirm details before finalizing bookings
 
-When extracting information, look for:
-- Location (postal code, address, or proximity references like "near me")
-- Desired date (specific date or relative like "Monday", "next week", "tomorrow")
-- Desired time (specific time or time of day like "morning", "afternoon", "evening")
-- Duration or end time
-- Service type (general support, caregiving, companionship, etc.)
-- Any PSW preferences (certifications, ratings, specific skills)
+When the user provides booking details, extract and confirm:
+- Location (city, postal code, address)
+- Desired date (specific date)
+- Desired time (start and end time)
+- Service type if mentioned
 
-Always respond with a natural, conversational message. After each message, provide a JSON block with extracted data.
-Format extracted data as JSON after your message like this:
-\`\`\`json
-{
-  "location": {"latitude": number, "longitude": number, "postalCode": string},
-  "desiredDate": "YYYY-MM-DD",
-  "desiredStartTime": "HH:MM",
-  "desiredEndTime": "HH:MM",
-  "serviceType": string,
-  "pswPreferences": {...},
-  "isComplete": boolean,
-  "confidence": 0-100
-}
-\`\`\``;
+Always respond conversationally and list back what you understood.`;
 
 export class AIService {
   private conversationHistory: Array<{ role: string; content: string }> = [];
@@ -62,8 +46,9 @@ export class AIService {
     });
 
     try {
+      console.log('[AIService] Calling OpenAI with gpt-4o-mini');
       const response = await getOpenAIClient().chat.completions.create({
-        model: 'gpt-4',
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
@@ -78,29 +63,28 @@ export class AIService {
         max_tokens: 500,
       });
 
-      const aiMessage =
-        response.choices[0]?.message?.content || 'Unable to process request.';
+      console.log('[AIService] Response received successfully');
+      const assistantMessage = response.choices[0].message.content || '';
 
       // Add assistant response to history
       this.conversationHistory.push({
         role: 'assistant',
-        content: aiMessage,
+        content: assistantMessage,
       });
 
-      // Extract JSON data from response
-      const extractedData = this.extractJSON(aiMessage);
-      const confidence = extractedData?.confidence || 0;
-      const isComplete = extractedData?.isComplete || false;
+      // For gpt-4o-mini, we get a natural response. Try to extract structured data if present.
+      const extractedData = this.extractJSON(assistantMessage);
 
       return {
         extractedData: extractedData || {},
-        aiMessage: this.removeJSONFromMessage(aiMessage),
-        confidence,
-        requiresConfirmation: isComplete && confidence >= 80,
+        aiMessage: this.removeJSONFromMessage(assistantMessage),
+        confidence: extractedData?.confidence || 0.5,
+        requiresConfirmation: false,
       };
     } catch (error) {
-      console.error('AI Service Error:', error);
-      throw new Error('Failed to process message with AI');
+      console.error('[AIService] OpenAI Error:', error instanceof Error ? error.message : error);
+      // Throw error so the caller can implement fallback
+      throw error;
     }
   }
 
