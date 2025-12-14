@@ -41,11 +41,13 @@ export class PSWMatchingService {
     radiusKm: number
   ): PSWProfile[] {
     return pswProfiles.filter((psw) => {
+      const clientLat = 'latitude' in clientLocation ? clientLocation.latitude : (clientLocation as any).lat;
+      const clientLng = 'longitude' in clientLocation ? clientLocation.longitude : (clientLocation as any).lng;
       const distance = this.calculateDistance(
-        clientLocation.latitude,
-        clientLocation.longitude,
-        psw.location.latitude,
-        psw.location.longitude
+        clientLat,
+        clientLng,
+        psw.location.lat,
+        psw.location.lng
       );
       return distance <= radiusKm;
     });
@@ -97,14 +99,31 @@ export class PSWMatchingService {
     startTime: string,
     endTime: string
   ): PSWProfile[] {
-    return pswProfiles.filter((psw) =>
-      this.isAvailableForTimeSlot(
-        psw.availableTimeSlots,
-        requestedDate,
-        startTime,
-        endTime
-      )
-    );
+    return pswProfiles.filter((psw) => {
+      const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][requestedDate.getDay()];
+      const dateStr = requestedDate.toISOString().split('T')[0];
+      
+      // Check date overrides first
+      if (psw.availability.dateOverrides[dateStr]) {
+        const slots = psw.availability.dateOverrides[dateStr].slots;
+        const requestedSlot = Object.entries(slots).find(([slot]) => {
+          const [slotStart, slotEnd] = slot.split('-');
+          return slotStart === startTime && slotEnd === endTime;
+        });
+        return requestedSlot && requestedSlot[1].status === 'available';
+      }
+      
+      // Fall back to weekly template
+      if (!(dayOfWeek in psw.availability.weeklyTemplate)) {
+        return false;
+      }
+      
+      const slots = psw.availability.weeklyTemplate[dayOfWeek] || [];
+      return slots.some(slot => {
+        const [slotStart, slotEnd] = slot.split('-');
+        return slotStart === startTime && slotEnd === endTime;
+      });
+    });
   }
 
   /**
@@ -130,7 +149,7 @@ export class PSWMatchingService {
     minRating: number
   ): PSWProfile[] {
     if (!minRating || minRating <= 0) return pswProfiles;
-    return pswProfiles.filter((psw) => psw.ratings >= minRating);
+    return pswProfiles.filter((psw) => (psw.ratings ?? 0) >= minRating);
   }
 
   /**
@@ -146,7 +165,7 @@ export class PSWMatchingService {
 
     return pswProfiles.filter((psw) =>
       requiredCertifications.every((cert) =>
-        psw.certifications.some(
+        (psw.certifications ?? []).some(
           (pswCert) => pswCert.toLowerCase() === cert.toLowerCase()
         )
       )
@@ -164,19 +183,21 @@ export class PSWMatchingService {
       let score = 100;
 
       // Proximity score (closer is better)
+      const clientLat = 'latitude' in clientLocation ? clientLocation.latitude : (clientLocation as any).lat;
+      const clientLng = 'longitude' in clientLocation ? clientLocation.longitude : (clientLocation as any).lng;
       const distance = this.calculateDistance(
-        clientLocation.latitude,
-        clientLocation.longitude,
-        psw.location.latitude,
-        psw.location.longitude
+        clientLat,
+        clientLng,
+        psw.location.lat,
+        psw.location.lng
       );
       score -= distance * 2; // Reduce score by 2 points per km
 
       // Rating score
-      score += psw.ratings * 5; // 5 points per rating star
+      score += (psw.ratings ?? 0) * 5; // 5 points per rating star
 
       // Review count score (more reviews = more reliable)
-      score += Math.min(psw.reviewCount * 0.5, 10);
+      score += Math.min((psw.reviewCount ?? 0) * 0.5, 10);
 
       return {
         ...psw,
