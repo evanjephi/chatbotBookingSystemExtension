@@ -32,7 +32,7 @@ async function seedDatabase() {
     console.log('Starting database seeding...');
     
     // Check if PSWs already exist
-    const existingPSWs = await db.collection('psws').limit(1).get();
+    const existingPSWs = await db.collection('registeredPsw').limit(1).get();
     if (!existingPSWs.empty) {
       console.log('Database already has PSWs. Skipping seed.');
       process.exit(0);
@@ -41,7 +41,7 @@ async function seedDatabase() {
     // Add PSW profiles
     let addedCount = 0;
     for (const psw of SAMPLE_PSW_PROFILES) {
-      const docRef = await db.collection('psws').add({
+      const docRef = await db.collection('registeredPsw').add({
         ...psw,
         createdAt: new Date(),
         updatedAt: new Date(),
