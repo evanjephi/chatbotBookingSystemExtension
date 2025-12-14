@@ -8,38 +8,68 @@ import type {
 } from '../types/index.js';
 
 let firebaseInstance: FirebaseService | null = null;
+let inMemoryData: any = {
+  conversations: new Map(),
+  messages: new Map(),
+  clients: new Map(),
+  psws: new Map(),
+  bookings: new Map(),
+};
 
 export class FirebaseService {
-  private db: admin.firestore.Firestore;
+  private db: admin.firestore.Firestore | null = null;
+  private initialized = false;
+  private useInMemory = false;
 
   constructor() {
-    if (!admin.apps.length) {
-      let serviceAccount: any;
+    // Don't initialize Firebase in constructor - do it lazily on first use
+  }
 
-      if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-        try {
-          // The JSON is stored as a string in .env.local with \\n escape sequences
-          // JSON.parse will correctly interpret these as newline characters
-          serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-        } catch (err) {
-          console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT:', err);
-          throw new Error('Invalid FIREBASE_SERVICE_ACCOUNT JSON');
+  async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+
+    try {
+      console.log('[Firebase] Attempting to initialize...');
+      if (!admin.apps.length) {
+        let serviceAccount: any;
+
+        if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+          try {
+            // Try to parse the service account from env
+            const envString = process.env.FIREBASE_SERVICE_ACCOUNT;
+            // Try both escaped and unescaped versions
+            try {
+              serviceAccount = JSON.parse(envString);
+            } catch {
+              // If that fails, try unescaping newlines
+              const unescapedString = envString.replace(/\\n/g, '\n');
+              serviceAccount = JSON.parse(unescapedString);
+            }
+            
+            admin.initializeApp({
+              credential: admin.credential.cert(serviceAccount),
+            });
+            this.db = admin.firestore();
+            this.initialized = true;
+            this.useInMemory = false;
+            console.log('[Firebase] Successfully connected to Firebase');
+            return;
+          } catch (err) {
+            console.warn('[Firebase] Connection failed, falling back to in-memory storage:', err instanceof Error ? err.message : err);
+          }
         }
-      } else {
-        serviceAccount = {
-          project_id: process.env.FIREBASE_PROJECT_ID,
-          private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-          client_email: process.env.FIREBASE_CLIENT_EMAIL,
-        };
       }
-
-      console.log('Firebase Project ID:', serviceAccount.project_id);
-
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      });
+      
+      // If Firebase init fails or not configured, use in-memory fallback
+      this.useInMemory = true;
+      this.initialized = true;
+      console.log('[Firebase] Using in-memory storage (development mode)');
+    } catch (error) {
+      console.error('[Firebase] Fallback failed:', error);
+      // Still mark as initialized to prevent repeated attempts
+      this.initialized = true;
+      this.useInMemory = true;
     }
-    this.db = admin.firestore();
   }
 
   static getInstance(): FirebaseService {
@@ -51,34 +81,33 @@ export class FirebaseService {
 
   // Client operations
   async getClient(clientId: string): Promise<ClientProfile | null> {
-    const doc = await this.db.collection('clients').doc(clientId).get();
+    await this.ensureInitialized();
+    const doc = await this.db!.collection('clients').doc(clientId).get();
     return (doc.data() as ClientProfile) || null;
   }
 
   async createClient(client: Omit<ClientProfile, 'id'>): Promise<string> {
-    const docRef = await this.db
+    await this.ensureInitialized();
+    const docRef = await this.db!
       .collection('clients')
       .add({ ...client, createdAt: new Date(), updatedAt: new Date() });
     return docRef.id;
   }
 
   async updateClient(clientId: string, updates: Partial<ClientProfile>) {
-    await this.db.collection('clients').doc(clientId).update({
+    await this.ensureInitialized();
+    await this.db!.collection('clients').doc(clientId).update({
       ...updates,
       updatedAt: new Date(),
     });
   }
 
   // PSW operations
-  async getPSW(pswId: string): Promise<PSWProfile | null> {
-    const doc = await this.db.collection('psws').doc(pswId).get();
-    return (doc.data() as PSWProfile) || null;
-  }
-
   async getPSWsByLocation(): Promise<PSWProfile[]> {
     // Firestore doesn't have native geo-distance queries, so we fetch all PSWs
     // and filter by distance on the application side (which we do in PSWMatchingService)
-    const snapshot = await this.db.collection('psws').get();
+    await this.ensureInitialized();
+    const snapshot = await this.db!.collection('psws').get();
     return snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -86,15 +115,63 @@ export class FirebaseService {
   }
 
   async getAllPSWs(): Promise<PSWProfile[]> {
-    const snapshot = await this.db.collection('psws').get();
+    await this.ensureInitialized();
+    
+    if (this.useInMemory) {
+      return Array.from(inMemoryData.psws.values());
+    }
+    
+    const snapshot = await this.db!.collection('psws').get();
     return snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     } as PSWProfile));
   }
 
+  async createOrUpdatePSW(psw: PSWProfile): Promise<string> {
+    await this.ensureInitialized();
+
+    if (this.useInMemory) {
+      inMemoryData.psws.set(psw.id, {
+        ...psw,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      console.log(`[Firebase] In-memory: Saved PSW ${psw.id}`);
+      return psw.id;
+    }
+
+    try {
+      await this.db!.collection('psws').doc(psw.id).set(
+        {
+          ...psw,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      );
+      return psw.id;
+    } catch (error) {
+      console.error(`[Firebase] Error saving PSW ${psw.id}:`, error);
+      throw error;
+    }
+  }
+
+  async getPSW(pswId: string): Promise<PSWProfile | null> {
+    await this.ensureInitialized();
+
+    if (this.useInMemory) {
+      return inMemoryData.psws.get(pswId) || null;
+    }
+
+    const doc = await this.db!.collection('psws').doc(pswId).get();
+    if (!doc.exists) return null;
+    return { id: doc.id, ...doc.data() } as PSWProfile;
+  }
+
   async createPSW(psw: Omit<PSWProfile, 'id'>): Promise<string> {
-    const docRef = await this.db.collection('psws').add({
+    await this.ensureInitialized();
+    const docRef = await this.db!.collection('psws').add({
       ...psw,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -104,7 +181,8 @@ export class FirebaseService {
 
   // Booking operations
   async createBooking(booking: Omit<Booking, 'id'>): Promise<string> {
-    const docRef = await this.db.collection('bookings').add({
+    await this.ensureInitialized();
+    const docRef = await this.db!.collection('bookings').add({
       ...booking,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -113,7 +191,8 @@ export class FirebaseService {
   }
 
   async getBooking(bookingId: string): Promise<Booking | null> {
-    const doc = await this.db.collection('bookings').doc(bookingId).get();
+    await this.ensureInitialized();
+    const doc = await this.db!.collection('bookings').doc(bookingId).get();
     if (!doc.exists) return null;
     return {
       id: doc.id,
@@ -122,21 +201,24 @@ export class FirebaseService {
   }
 
   async updateBooking(bookingId: string, updates: Partial<Booking>) {
-    await this.db.collection('bookings').doc(bookingId).update({
+    await this.ensureInitialized();
+    await this.db!.collection('bookings').doc(bookingId).update({
       ...updates,
       updatedAt: new Date(),
     });
   }
 
   async cancelBooking(bookingId: string) {
-    await this.db.collection('bookings').doc(bookingId).update({
+    await this.ensureInitialized();
+    await this.db!.collection('bookings').doc(bookingId).update({
       status: 'cancelled',
       updatedAt: new Date(),
     });
   }
 
   async getClientBookings(clientId: string): Promise<Booking[]> {
-    const snapshot = await this.db
+    await this.ensureInitialized();
+    const snapshot = await this.db!
       .collection('bookings')
       .where('clientId', '==', clientId)
       .get();
@@ -147,7 +229,8 @@ export class FirebaseService {
   }
 
   async getPSWBookings(pswId: string): Promise<Booking[]> {
-    const snapshot = await this.db
+    await this.ensureInitialized();
+    const snapshot = await this.db!
       .collection('bookings')
       .where('pswId', '==', pswId)
       .get();
@@ -161,7 +244,16 @@ export class FirebaseService {
   async createConversation(
     conversation: Omit<Conversation, 'id'>
   ): Promise<string> {
-    const docRef = await this.db.collection('conversations').add({
+    await this.ensureInitialized();
+    
+    if (this.useInMemory) {
+      // In-memory fallback
+      const id = `conv_${Date.now()}`;
+      inMemoryData.conversations.set(id, { ...conversation, id, messages: [] });
+      return id;
+    }
+    
+    const docRef = await this.db!.collection('conversations').add({
       ...conversation,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -170,7 +262,13 @@ export class FirebaseService {
   }
 
   async getConversation(conversationId: string): Promise<Conversation | null> {
-    const doc = await this.db
+    await this.ensureInitialized();
+    
+    if (this.useInMemory) {
+      return inMemoryData.conversations.get(conversationId) || null;
+    }
+    
+    const doc = await this.db!
       .collection('conversations')
       .doc(conversationId)
       .get();
@@ -185,7 +283,17 @@ export class FirebaseService {
     conversationId: string,
     updates: Partial<Conversation>
   ) {
-    await this.db.collection('conversations').doc(conversationId).update({
+    await this.ensureInitialized();
+    
+    if (this.useInMemory) {
+      const conv = inMemoryData.conversations.get(conversationId);
+      if (conv) {
+        Object.assign(conv, updates, { updatedAt: new Date() });
+      }
+      return;
+    }
+    
+    await this.db!.collection('conversations').doc(conversationId).update({
       ...updates,
       updatedAt: new Date(),
     });
@@ -195,7 +303,18 @@ export class FirebaseService {
     conversationId: string,
     message: ChatMessage
   ) {
-    await this.db
+    await this.ensureInitialized();
+    
+    if (this.useInMemory) {
+      const conv = inMemoryData.conversations.get(conversationId);
+      if (conv) {
+        if (!conv.messages) conv.messages = [];
+        conv.messages.push(message);
+      }
+      return;
+    }
+    
+    await this.db!
       .collection('conversations')
       .doc(conversationId)
       .collection('messages')
@@ -211,7 +330,8 @@ export class FirebaseService {
   }
 
   async getConversationMessages(conversationId: string): Promise<ChatMessage[]> {
-    const snapshot = await this.db
+    await this.ensureInitialized();
+    const snapshot = await this.db!
       .collection('conversations')
       .doc(conversationId)
       .collection('messages')
@@ -229,16 +349,24 @@ export class FirebaseService {
     if (!psw) return false;
 
     const dateStr = date.toISOString().split('T')[0];
-    return psw.availableTimeSlots.some(
-      (slot) => new Date(slot.date).toISOString().split('T')[0] === dateStr
-    );
+    const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][date.getDay()];
+    
+    // Check date overrides first
+    if (psw.availability.dateOverrides[dateStr]) {
+      const slots = Object.values(psw.availability.dateOverrides[dateStr].slots);
+      return slots.some(slot => slot.status === 'available');
+    }
+    
+    // Fall back to weekly template
+    return dayOfWeek in psw.availability.weeklyTemplate;
   }
 
   async updatePSWAvailability(
     pswId: string,
     updates: Partial<PSWProfile>
   ) {
-    await this.db.collection('psws').doc(pswId).update({
+    await this.ensureInitialized();
+    await this.db!.collection('psws').doc(pswId).update({
       ...updates,
       updatedAt: new Date(),
     });
