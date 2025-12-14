@@ -45,7 +45,7 @@ export class BookingController {
 
       // Get PSW details for confirmation message
       const psw = await firebaseService.getPSW(pswId);
-      const pswName = psw?.name || 'Your selected PSW';
+      const pswName = psw ? `${psw.firstName} ${psw.lastName}` : 'Your selected PSW';
 
       const confirmationMessage = `Great! Your booking has been confirmed! 🎉
 
