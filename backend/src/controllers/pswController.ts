@@ -101,7 +101,7 @@ export class PSWController {
       // Simple search by name or service type
       const filtered = allPSWs.filter(
         (psw) =>
-          psw.name.toLowerCase().includes(query.toLowerCase()) ||
+          `${psw.firstName} ${psw.lastName}`.toLowerCase().includes(query.toLowerCase()) ||
           psw.serviceTypes.some((service) =>
             service.toLowerCase().includes(query.toLowerCase())
           )
