@@ -2,21 +2,23 @@ import { Router } from 'express';
 import chatController from '../controllers/chatController.js';
 import bookingController from '../controllers/bookingController.js';
 import pswController from '../controllers/pswController.js';
+import { seedPSWData } from '../services/seedService.js';
 
 const router = Router();
 
 // Seed database with sample data
 router.post('/seed', async (_req, res) => {
   try {
-    // Don't try to initialize Firebase here - just return a message
-    // Users should seed data manually via Firebase Console or admin SDK
+    console.log('[API] Seeding PSW data...');
+    await seedPSWData();
     res.json({ 
-      message: 'Seed endpoint available. Sample PSW profiles are ready to be imported.',
-      note: 'To seed, use: curl -X POST http://localhost:5000/api/seed'
+      message: '✓ Successfully seeded 10 PSW workers to Firebase',
+      pswCount: 10,
+      location: 'Toronto'
     });
   } catch (error) {
-    console.error('Seed error:', error);
-    res.status(500).json({ error: 'Failed to seed database' });
+    console.error('[API] Seed error:', error);
+    res.status(500).json({ error: 'Failed to seed database', details: error instanceof Error ? error.message : error });
   }
 });
 
