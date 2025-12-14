@@ -142,7 +142,7 @@ export class FirebaseService {
     }
 
     try {
-      await this.db!.collection('psws').doc(psw.id).set(
+      await this.db!.collection('registeredPsw').doc(psw.id).set(
         {
           ...psw,
           createdAt: new Date(),
@@ -192,7 +192,7 @@ export class FirebaseService {
 
   async getBooking(bookingId: string): Promise<Booking | null> {
     await this.ensureInitialized();
-    const doc = await this.db!.collection('bookings').doc(bookingId).get();
+    const doc = await this.db!.collection('ClientBookings').doc(bookingId).get();
     if (!doc.exists) return null;
     return {
       id: doc.id,
@@ -202,7 +202,7 @@ export class FirebaseService {
 
   async updateBooking(bookingId: string, updates: Partial<Booking>) {
     await this.ensureInitialized();
-    await this.db!.collection('bookings').doc(bookingId).update({
+    await this.db!.collection('ClientBookings').doc(bookingId).update({
       ...updates,
       updatedAt: new Date(),
     });
@@ -210,7 +210,7 @@ export class FirebaseService {
 
   async cancelBooking(bookingId: string) {
     await this.ensureInitialized();
-    await this.db!.collection('bookings').doc(bookingId).update({
+    await this.db!.collection('ClientBookings').doc(bookingId).update({
       status: 'cancelled',
       updatedAt: new Date(),
     });
@@ -219,7 +219,7 @@ export class FirebaseService {
   async getClientBookings(clientId: string): Promise<Booking[]> {
     await this.ensureInitialized();
     const snapshot = await this.db!
-      .collection('bookings')
+      .collection('ClientBookings')
       .where('clientId', '==', clientId)
       .get();
     return snapshot.docs.map((doc) => ({
@@ -231,7 +231,7 @@ export class FirebaseService {
   async getPSWBookings(pswId: string): Promise<Booking[]> {
     await this.ensureInitialized();
     const snapshot = await this.db!
-      .collection('bookings')
+      .collection('ClientBookings')
       .where('pswId', '==', pswId)
       .get();
     return snapshot.docs.map((doc) => ({
