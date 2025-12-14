@@ -18,6 +18,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ clientId }) => {
     setClientId,
     addMessage,
     setIsLoading,
+    setError,
     bookingData,
     availablePSWs,
     selectedPSW,
@@ -49,9 +50,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ clientId }) => {
     }
   }, [clientId]);
 
-  // Auto-scroll to bottom of messages
+  // Auto-scroll to bottom of messages and focus input
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    inputRef.current?.focus();
   }, [messages]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -177,11 +179,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ clientId }) => {
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           placeholder="Type your message..."
-          disabled={isLoading || !conversationId}
+          disabled={isLoading}
           className="chat-input"
           autoComplete="off"
         />
-        <button type="submit" disabled={isLoading || !inputValue.trim()}>
+        <button type="submit" disabled={isLoading || !inputValue.trim() || !conversationId}>
           Send
         </button>
       </form>
