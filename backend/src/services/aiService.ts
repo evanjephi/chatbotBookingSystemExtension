@@ -1,15 +1,16 @@
 import OpenAI from 'openai';
 import type { BookingData } from '../types/index.js';
 
-let client: OpenAI | null = null;
-
 function getOpenAIClient(): OpenAI {
-  if (!client) {
-    client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY environment variable is not set');
   }
-  return client;
+  
+  return new OpenAI({
+    apiKey: apiKey,
+    timeout: 30000, // 30 second timeout
+  });
 }
 
 export interface AIExtractionResult {
@@ -46,8 +47,12 @@ export class AIService {
     });
 
     try {
+      const apiKey = process.env.OPENAI_API_KEY;
+      console.log('[AIService] API Key present:', !!apiKey);
       console.log('[AIService] Calling OpenAI with gpt-4o-mini');
-      const response = await getOpenAIClient().chat.completions.create({
+      
+      const client = getOpenAIClient();
+      const response = await client.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           {
@@ -82,7 +87,9 @@ export class AIService {
         requiresConfirmation: false,
       };
     } catch (error) {
-      console.error('[AIService] OpenAI Error:', error instanceof Error ? error.message : error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[AIService] OpenAI Error:', errorMessage);
+      console.error('[AIService] Full error:', error);
       // Throw error so the caller can implement fallback
       throw error;
     }
@@ -133,4 +140,6 @@ export class AIService {
   }
 }
 
-export default new AIService();
+const aiServiceInstance = new AIService();
+
+export default aiServiceInstance;
